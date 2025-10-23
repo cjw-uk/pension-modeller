@@ -4,6 +4,8 @@ This is a single-file web application designed to help you forecast your pension
 
 It moves beyond simple calculators by modeling market volatility and inflation, giving you a probabilistic view of your financial future.
 
+Vibe coded using Gemini. N.B I am not a financial advisor.
+
 ## Key Features
 
 * **Core Inputs:** Set your current age, desired retirement age, initial investment, and default monthly contributions.
