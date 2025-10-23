@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pension Forecast Calculator</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom styles for slider thumbs */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #4f46e5; /* indigo-600 */
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: -8px; /* Center thumb on track */
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #4f46e5;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #e5e7eb; /* gray-200 */
+            border-radius: 2px;
+            outline: none;
+        }
+        /* Style for number inputs in table */
+        .plan-input {
+            width: 100px;
+            padding: 4px 8px;
+            border: 1px solid #d1d5db; /* gray-300 */
+            border-radius: 6px;
+            text-align: right;
+        }
+        .plan-input:disabled {
+            background: #f3f4f6; /* gray-100 */
+            color: #9ca3af; /* gray-400 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans leading-normal relative">
+
+    <!-- Welcome Modal -->
+    <div id="welcomeModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 z-40 items-center justify-center hidden p-4">
+        <div class="bg-white p-8 rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Welcome to the Pension Forecaster!</h2>
+            <div class="space-y-4 text-gray-700">
+                <p>Here's a quick guide to get you started:</p>
+                <ol class="list-decimal list-inside space-y-2">
+                    <li>
+                        <strong>Your Details:</strong> Set your <span class="font-semibold text-indigo-600">Current Age</span> and desired <span class="font-semibold text-indigo-600">Retirement Age</span>.
+                    </li>
+                    <li>
+                        <strong>Default Assumptions:</strong> Input your <span class="font-semibold text-indigo-600">Initial Investment</span>, default <span class="font-semibold text-indigo-600">Monthly Contribution</span>, and expected <span class="font-semibold text-indigo-600">Annual Return</span>. You can also set a default <span class="font-semibold text-indigo-600">Withdrawal</span> amount for retirement.
+                    </li>
+                    <li>
+                        <strong>Monte Carlo Simulation:</strong> For a more realistic forecast, check this box! It runs 1,000 simulations to show a range of outcomes.
+                        <ul class="list-disc list-inside ml-6 text-sm space-y-1 mt-1">
+                            <li><span class="font-semibold">Std Deviation</span> controls market volatility (risk).</li>
+                            <li><span class="font-semibold">Inflation</span> settings let you model the rising cost of living. Check the box to automatically increase your withdrawals to keep pace.</li>
+                        </ul>
+                    </li>
+                    <li>
+                        <strong>The Graph:</strong> This shows your pot's value. The solid black line is the <span class="font-semibold">50th percentile (Median)</span> outcome. The shaded blue area shows the range between a "poor" (10th percentile) and "good" (90th percentile) outcome.
+                    </li>
+                    <li>
+                        <strong>Customize Yearly Plan:</strong> Don't stick to the defaults! Go to the table at the bottom to set custom contribution and withdrawal amounts for every single year. The chart will update instantly.
+                    </li>
+                </ol>
+                <p class="font-semibold pt-2">Your "Plan Success Rate" is the % of simulations where you didn't run out of money by age 100.</p>
+            </div>
+            <button id="closeModalButton" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors mt-6">
+                Start Planning
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-50 items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-lg shadow-lg flex items-center space-x-4">
+            <svg class="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-xl font-semibold text-gray-700">Simulating 1,000 runs...</span>
+        </div>
+    </div>
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Pension Forecast Calculator</h1>
+            <p class="text-lg text-gray-600 mt-2">Estimate your pension pot and see how long your money might last.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Left Column: Controls -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Your Details</h2>
+                    <div class="space-y-4">
+                        <!-- Current Age -->
+                        <div>
+                            <label for="currentAge" class="flex justify-between font-medium text-sm text-gray-700">
+                                <span>Current Age</span>
+                                <span id="currentAgeVal" class="font-bold text-indigo-600">30</span>
+                            </label>
+                            <input type="range" id="currentAge" min="20" max="60" value="30" step="1" class="mt-1">
+                        </div>
+                        <!-- Retirement Age -->
+                        <div>
+                            <label for="retirementAge" class="flex justify-between font-medium text-sm text-gray-700">
+                                <span>Retirement Age</span>
+                                <span id="retirementAgeVal" class="font-bold text-indigo-600">65</span>
+                            </label>
+                            <input type="range" id="retirementAge" min="50" max="80" value="65" step="1" class="mt-1">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Default Assumptions -->
+                <div class="bg-white p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Default Assumptions</h2>
+                    <div class="space-y-4">
+                        <!-- Initial Investment -->
+                        <div>
+                            <label for="initialInvestment" class="flex justify-between font-medium text-sm text-gray-700">
+                                <span>Initial Investment</span>
+                                <span id="initialInvestmentVal" class="font-bold text-indigo-600">£10,000</span>
+                            </label>
+                            <input type="range" id="initialInvestment" min="0" max="500000" value="10000" step="1000" class="mt-1">
+                        </div>
+                        <!-- Monthly Contribution -->
+                        <div>
+                            <label for="monthlyContribution" class="flex justify-between font-medium text-sm text-gray-700">
+                                <span>Default Contribution (per month)</span>
+                                <span id="monthlyContributionVal" class="font-bold text-indigo-600">£300</span>
+                            </label>
+                            <input type="range" id="monthlyContribution" min="0" max="3000" value="300" step="50" class="mt-1">
+                        </div>
+                        <!-- Default Annual Return -->
+                        <div>
+                            <label for="returnRate" class="flex justify-between font-medium text-sm text-gray-700">
+                                <span>Default Annual Return</span>
+                                <span id="returnRateVal" class="font-bold text-indigo-600">7.0%</span>
+                            </label>
+                            <input type="range" id="returnRate" min="0" max="20" value="7" step="0.5" class="mt-1">
+                        </div>
+                        <!-- Default Annual Withdrawal (£) -->
+                        <div>
+                            <label for="withdrawalRate" class="flex justify-between font-medium text-sm text-gray-700">
+                                <span>Default Withdrawal (per year)</span>
+                                <span id="withdrawalRateVal" class="font-bold text-indigo-600">£20,000</span>
+                            </label>
+                            <input type="range" id="withdrawalRate" min="0" max="100000" value="20000" step="1000" class="mt-1">
+                        </div>
+
+                        <!-- State Pension -->
+                        <div class="flex items-center justify-between pt-2 border-t mt-4">
+                            <label for="includeStatePension" class="font-medium text-sm text-gray-700">Include State Pension</label>
+                            <input type="checkbox" id="includeStatePension" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                        </div>
+                        <div id="statePensionBlock" class="hidden space-y-2">
+                            <label for="statePensionAmount" class="flex justify-between font-medium text-sm text-gray-700">
+                                <span>Annual State Pension</span>
+                                <span id="statePensionAmountVal" class="font-bold text-indigo-600">£11,500</span>
+                            </label>
+                            <input type="range" id="statePensionAmount" min="0" max="20000" value="11500" step="100" class="mt-1">
+                            <label for="statePensionAge" class="flex justify-between font-medium text-sm text-gray-700 pt-2">
+                                <span>State Pension Start Age</span>
+                                <span id="statePensionAgeVal" class="font-bold text-indigo-600">67</span>
+                            </label>
+                            <input type="range" id="statePensionAge" min="60" max="80" value="67" step="1" class="mt-1">
+                        </div>
+                        
+                        <!-- Monte Carlo Simulation -->
+                        <div class="flex items-center justify-between pt-2 border-t mt-4">
+                            <label for="includeAdvanced" class="font-medium text-sm text-gray-700">Monte Carlo Simulation</label>
+                            <input type="checkbox" id="includeAdvanced" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                        </div>
+                        <div id="advancedBlock" class="hidden space-y-4 pt-2">
+                            <p class="text-xs text-gray-500">Run 1,000 simulations with random returns and inflation to see a range of possible outcomes.</p>
+                            
+                            <!-- Return Std Dev -->
+                            <label for="returnStdDev" class="flex justify-between font-medium text-sm text-gray-700 pt-2">
+                                <span>Return Standard Deviation</span>
+                                <span id="returnStdDevVal" class="font-bold text-indigo-600">15.0%</span>
+                            </label>
+                            <input type="range" id="returnStdDev" min="0" max="40" value="15" step="0.5" class="mt-1">
+                            
+                            <!-- Inflation Mean -->
+                            <label for="inflationMean" class="flex justify-between font-medium text-sm text-gray-700 pt-2">
+                                <span>Average Annual Inflation</span>
+                                <span id="inflationMeanVal" class="font-bold text-indigo-600">2.5%</span>
+                            </label>
+                            <input type="range" id="inflationMean" min="0" max="10" value="2.5" step="0.1" class="mt-1">
+                            
+                            <!-- Inflation Std Dev -->
+                            <label for="inflationStdDev" class="flex justify-between font-medium text-sm text-gray-700 pt-2">
+                                <span>Inflation Standard Deviation</span>
+                                <span id="inflationStdDevVal" class="font-bold text-indigo-600">1.0%</span>
+                            </label>
+                            <input type="range" id="inflationStdDev" min="0" max="5" value="1.0" step="0.1" class="mt-1">
+
+                            <!-- Adjust for Inflation Checkbox -->
+                            <div class="flex items-center justify-between pt-2 border-t">
+                                <label for="adjustForInflation" class="font-medium text-sm text-gray-700">Adjust withdrawals for inflation</label>
+                                <input type="checkbox" id="adjustForInflation" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" checked>
+                            </div>
+                            
+                            <button id="rerunButton" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors">
+                                Rerun Simulation
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Chart and Stats -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Chart -->
+                <div class="bg-white p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Forecast</h2>
+                    <div class="relative h-96">
+                        <canvas id="pensionChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white p-6 rounded-lg shadow-lg">
+                        <h3 id="retirementValueLabel" class="text-lg font-semibold text-gray-700">Median Pot at Retirement</h3>
+                        <p id="retirementValue" class="text-3xl font-bold text-indigo-600 mt-2">£0</p>
+                    </div>
+                    <div id="successRateBox" class="bg-white p-6 rounded-lg shadow-lg">
+                        <h3 class="text-lg font-semibold text-gray-700">Plan Success Rate</h3>
+                        <p id="successRate" class="text-3xl font-bold text-green-600 mt-2">100%</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-lg">
+                        <h3 id="runsOutAgeLabel" class="text-lg font-semibold text-gray-700">Median Runs Out Age</h3>
+                        <p id="runsOutAge" class="text-3xl font-bold text-red-600 mt-2">Never</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Full Width: Yearly Plan -->
+            <div class="lg:col-span-3 bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold text-gray-700 mb-4">Customize Yearly Plan</h2>
+                <div id="planContainer" class="max-h-96 overflow-y-auto border rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Contribution (£/mo)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Withdrawal (£/yr)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Withdrawal (Median %)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total Income (Median £/yr)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="planTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- JS will populate this -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div> <!-- end grid -->
+    </div> <!-- end container -->
+
+    <script>
+        // --- Globals ---
+        let pensionChart;
+        let plan = {}; // Stores the year-by-year plan: { 30: { contribution: 500, withdrawal: 0 }, ... }
+        const MAX_AGE = 100; // Max age for the simulation
+        const NUM_SIMULATIONS = 1000; // Number of Monte Carlo runs
+
+        // --- DOM Elements ---
+        const sliders = {
+            currentAge: document.getElementById('currentAge'),
+            retirementAge: document.getElementById('retirementAge'),
+            initialInvestment: document.getElementById('initialInvestment'),
+            monthlyContribution: document.getElementById('monthlyContribution'),
+            returnRate: document.getElementById('returnRate'),
+            withdrawalRate: document.getElementById('withdrawalRate'),
+            statePensionAmount: document.getElementById('statePensionAmount'),
+            statePensionAge: document.getElementById('statePensionAge'),
+            returnStdDev: document.getElementById('returnStdDev'),
+            inflationMean: document.getElementById('inflationMean'), // Added
+            inflationStdDev: document.getElementById('inflationStdDev'), // Added
+        };
+        const sliderVals = {
+            currentAgeVal: document.getElementById('currentAgeVal'),
+            retirementAgeVal: document.getElementById('retirementAgeVal'),
+            initialInvestmentVal: document.getElementById('initialInvestmentVal'),
+            monthlyContributionVal: document.getElementById('monthlyContributionVal'),
+            returnRateVal: document.getElementById('returnRateVal'),
+            withdrawalRateVal: document.getElementById('withdrawalRateVal'),
+            statePensionAmountVal: document.getElementById('statePensionAmountVal'),
+            statePensionAgeVal: document.getElementById('statePensionAgeVal'),
+            returnStdDevVal: document.getElementById('returnStdDevVal'),
+            inflationMeanVal: document.getElementById('inflationMeanVal'), // Added
+            inflationStdDevVal: document.getElementById('inflationStdDevVal'), // Added
+        };
+        const includeStatePensionCheck = document.getElementById('includeStatePension');
+        const statePensionBlock = document.getElementById('statePensionBlock');
+        const includeAdvancedCheck = document.getElementById('includeAdvanced');
+        const advancedBlock = document.getElementById('advancedBlock');
+        const adjustForInflationCheck = document.getElementById('adjustForInflation'); // Added
+        const rerunButton = document.getElementById('rerunButton');
+        const planTableBody = document.getElementById('planTableBody');
+        const retirementValueEl = document.getElementById('retirementValue');
+        const runsOutAgeEl = document.getElementById('runsOutAge');
+        const successRateEl = document.getElementById('successRate'); // Added
+        const successRateBox = document.getElementById('successRateBox'); // Added
+        const loadingOverlay = document.getElementById('loadingOverlay'); // Added
+        const welcomeModal = document.getElementById('welcomeModal'); // Added
+        const closeModalButton = document.getElementById('closeModalButton'); // Added
+        
+        // Added labels for dynamic text
+        const retirementValueLabel = document.getElementById('retirementValueLabel');
+        const runsOutAgeLabel = document.getElementById('runsOutAgeLabel');
+
+        // --- Formatters ---
+        const formatCurrency = (val) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(val);
+        const formatPercent = (val) => `${parseFloat(val).toFixed(1)}%`;
+        const formatNumber = (val) => parseInt(val).toString();
+
+        /**
+         * Generates a random number from a normal distribution (Box-Muller transform).
+         */
+        function getNormalRandom(mean, stdDev) {
+            let u1 = 0, u2 = 0;
+            while (u1 === 0) u1 = Math.random();
+            while (u2 === 0) u2 = Math.random();
+            const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+            return z * stdDev + mean;
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('load', initialize);
+
+        function initialize() {
+            for (const id in sliders) {
+                if (sliders[id]) {
+                    sliders[id].addEventListener('input', onSliderChange);
+                    updateSliderValue(id);
+                } else {
+                    console.error(`Slider element not found for ID: ${id}`);
+                }
+            }
+            
+            includeStatePensionCheck.addEventListener('change', () => {
+                statePensionBlock.classList.toggle('hidden', !includeStatePensionCheck.checked);
+                runSimulation();
+            });
+            
+            includeAdvancedCheck.addEventListener('change', () => {
+                advancedBlock.classList.toggle('hidden', !includeAdvancedCheck.checked);
+                runSimulation();
+            });
+
+            adjustForInflationCheck.addEventListener('change', runSimulation);
+            rerunButton.addEventListener('click', runSimulation);
+            
+            // Added modal listener
+            closeModalButton.addEventListener('click', () => {
+                welcomeModal.classList.add('hidden');
+            });
+
+            initChart();
+            rebuildPlanFromDefaults();
+            renderPlanTable();
+            runSimulation();
+            
+            // Show the modal on initial load
+            welcomeModal.classList.remove('hidden');
+            welcomeModal.classList.add('flex');
+        }
+
+        function onSliderChange(e) {
+            const id = e.target.id;
+            updateSliderValue(id);
+            
+            // Age validation
+            if (id === 'currentAge' && parseInt(sliders.currentAge.value) >= parseInt(sliders.retirementAge.value)) {
+                sliders.retirementAge.value = parseInt(sliders.currentAge.value) + 1;
+                updateSliderValue('retirementAge');
+            }
+            if (id === 'retirementAge') {
+                const retAge = parseInt(sliders.retirementAge.value);
+                if (parseInt(sliders.currentAge.value) >= retAge) {
+                    sliders.currentAge.value = retAge - 1;
+                    updateSliderValue('currentAge');
+                }
+                if (sliders.statePensionAge && parseInt(sliders.statePensionAge.value) < retAge) {
+                    sliders.statePensionAge.value = retAge;
+                    updateSliderValue('statePensionAge');
+                }
+            }
+            if (id === 'statePensionAge') {
+                if (sliders.retirementAge && parseInt(sliders.statePensionAge.value) < parseInt(sliders.retirementAge.value)) {
+                    sliders.statePensionAge.value = sliders.retirementAge.value;
+                    updateSliderValue('statePensionAge');
+                }
+            }
+
+            // Sliders that reset the plan table
+            if (['currentAge', 'retirementAge', 'monthlyContribution', 'withdrawalRate'].includes(id)) {
+                rebuildPlanFromDefaults();
+                renderPlanTable();
+            }
+            runSimulation();
+        }
+
+        function onTableInputChange(age, type, value) {
+            plan[age][type] = parseFloat(value) || 0;
+            runSimulation();
+        }
+
+        // --- Core Functions ---
+
+        function updateSliderValue(id) {
+            if (!sliders[id] || !sliderVals[id + 'Val']) return;
+            const val = sliders[id].value;
+            let displayVal = val;
+            switch (id) {
+                case 'initialInvestment':
+                case 'monthlyContribution':
+                case 'withdrawalRate':
+                case 'statePensionAmount':
+                    displayVal = formatCurrency(val);
+                    break;
+                case 'returnRate':
+                case 'returnStdDev':
+                case 'inflationMean': // Added
+                case 'inflationStdDev': // Added
+                    displayVal = formatPercent(val);
+                    break;
+                default:
+                    displayVal = formatNumber(val);
+            }
+            sliderVals[id + 'Val'].textContent = displayVal;
+        }
+
+        function rebuildPlanFromDefaults() {
+            plan = {};
+            const currentAge = parseInt(sliders.currentAge.value);
+            const retirementAge = parseInt(sliders.retirementAge.value);
+            const defaultContribution = parseFloat(sliders.monthlyContribution.value);
+            const defaultWithdrawal = parseFloat(sliders.withdrawalRate.value);
+
+            for (let age = currentAge; age <= MAX_AGE; age++) {
+                plan[age] = {
+                    contribution: (age < retirementAge) ? defaultContribution : 0,
+                    withdrawal: (age >= retirementAge) ? defaultWithdrawal : 0
+                };
+            }
+        }
+
+        function renderPlanTable() {
+            if (!planTableBody) return;
+            planTableBody.innerHTML = '';
+            const currentAge = parseInt(sliders.currentAge.value);
+            const retirementAge = parseInt(sliders.retirementAge.value);
+
+            for (let age = currentAge; age <= MAX_AGE; age++) {
+                const yearPlan = plan[age];
+                const tr = document.createElement('tr');
+                tr.className = age === retirementAge ? 'bg-indigo-50 font-semibold' : '';
+
+                tr.innerHTML = `
+                    <td class="px-6 py-3 whitespace-nowrap text-sm">${age}</td>
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-right">
+                        <input type="number" min="0" step="50" value="${yearPlan.contribution}" class="plan-input" ${age >= retirementAge ? 'disabled' : ''} data-age="${age}" data-type="contribution">
+                    </td>
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-right">
+                        <input type="number" min="0" step="1000" value="${yearPlan.withdrawal}" class="plan-input" ${age < retirementAge ? 'disabled' : ''} data-age="${age}" data-type="withdrawal">
+                    </td>
+                    <td id="percent-${age}" class="px-6 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-700">${age < retirementAge ? '-' : '0.0%'}</td>
+                    <td id="total-income-${age}" class="px-6 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-900">${formatCurrency(0)}</td>
+                `;
+                planTableBody.appendChild(tr);
+            }
+
+            // Add event listeners after creation
+            planTableBody.querySelectorAll('.plan-input').forEach(input => {
+                input.addEventListener('change', (e) => onTableInputChange(e.target.dataset.age, e.target.dataset.type, e.target.value));
+            });
+        }
+
+        function setLoading(isLoading) {
+            loadingOverlay.classList.toggle('hidden', !isLoading);
+            loadingOverlay.classList.toggle('flex', isLoading);
+        }
+
+        /**
+         * Main controller function. Decides which simulation to run.
+         */
+        async function runSimulation() {
+            setLoading(true);
+            await new Promise(resolve => setTimeout(resolve, 10)); // Allow spinner to render
+
+            const useMonteCarlo = includeAdvancedCheck.checked;
+            const includeStatePension = includeStatePensionCheck.checked;
+            
+            let labels, potData, potData10, potData50, potData90, incomeData, retirementValue, runsOutAge, successRate;
+
+            if (useMonteCarlo) {
+                // Set labels for Monte Carlo
+                if (retirementValueLabel) retirementValueLabel.textContent = "Median Pot at Retirement";
+                if (runsOutAgeLabel) runsOutAgeLabel.textContent = "Median Runs Out Age";
+                if (successRateBox) successRateBox.classList.remove('hidden');
+                
+                const results = runMonteCarloSimulation();
+                labels = results.labels;
+                potData10 = results.potData10;
+                potData50 = results.potData50;
+                potData90 = results.potData90;
+                incomeData = results.incomeData50; // Use median income
+                retirementValue = results.medianRetirementValue;
+                runsOutAge = results.medianRunsOutAge;
+                successRate = results.successRate;
+
+                pensionChart.data.datasets[0].data = []; // Clear single run
+                pensionChart.data.datasets[1].data = potData90;
+                pensionChart.data.datasets[2].data = potData10;
+                pensionChart.data.datasets[3].data = potData50;
+                
+                pensionChart.data.datasets[0].hidden = true;
+                pensionChart.data.datasets[1].hidden = false;
+                pensionChart.data.datasets[2].hidden = false;
+                pensionChart.data.datasets[3].hidden = false;
+
+            } else {
+                // Set labels for Single Run
+                if (retirementValueLabel) retirementValueLabel.textContent = "Pot at Retirement";
+                if (runsOutAgeLabel) runsOutAgeLabel.textContent = "Pot Runs Out Age";
+                if (successRateBox) successRateBox.classList.add('hidden');
+                
+                // Run a single, deterministic simulation
+                const results = calculateSingleRun(false, false); // false = no random, false = no inflation adjust
+                labels = results.labels;
+                potData = results.potData;
+                incomeData = results.incomeData;
+                retirementValue = results.retirementValue;
+                runsOutAge = results.runsOutAge;
+                successRate = (runsOutAge === "Never") ? 100 : 0; // Single run is 100% or 0%
+
+                pensionChart.data.datasets[0].data = potData;
+                pensionChart.data.datasets[1].data = [];
+                pensionChart.data.datasets[2].data = [];
+                pensionChart.data.datasets[3].data = [];
+
+                pensionChart.data.datasets[0].hidden = false;
+                pensionChart.data.datasets[1].hidden = true;
+                pensionChart.data.datasets[2].hidden = true;
+                pensionChart.data.datasets[3].hidden = true;
+            }
+
+            // Update shared chart elements
+            pensionChart.data.labels = labels;
+            pensionChart.data.datasets[4].data = incomeData;
+            pensionChart.data.datasets[4].hidden = !includeStatePension;
+            pensionChart.update();
+
+            // Update Stats
+            retirementValueEl.textContent = formatCurrency(retirementValue);
+            runsOutAgeEl.textContent = runsOutAge;
+            successRateEl.textContent = formatPercent(successRate);
+            successRateEl.className = `text-3xl font-bold mt-2 ${successRate >= 80 ? 'text-green-600' : (successRate >= 50 ? 'text-yellow-600' : 'text-red-600')}`;
+
+
+            setLoading(false);
+        }
+
+        /**
+         * Runs a single simulation from start to end.
+         */
+        function calculateSingleRun(useRandomness, adjustForInflation) {
+            // Get all parameters
+            const currentAge = parseInt(sliders.currentAge.value);
+            const retirementAge = parseInt(sliders.retirementAge.value);
+            const initialInvestment = parseFloat(sliders.initialInvestment.value);
+            const returnRate = parseFloat(sliders.returnRate.value) / 100;
+            const returnStdDev = parseFloat(sliders.returnStdDev.value) / 100;
+            const inflationMean = parseFloat(sliders.inflationMean.value) / 100;
+            const inflationStdDev = parseFloat(sliders.inflationStdDev.value) / 100;
+            const includeStatePension = includeStatePensionCheck.checked;
+            const statePensionAmount = parseFloat(sliders.statePensionAmount.value);
+            const statePensionAge = parseInt(sliders.statePensionAge.value);
+
+            const labels = [];
+            const potData = [];
+            const incomeData = [];
+            let currentValue = initialInvestment;
+            let retirementValue = 0;
+            let runsOutAge = "Never";
+            
+            // This object will hold the inflation-adjusted withdrawal amounts for this run
+            // const adjustedPlan = JSON.parse(JSON.stringify(plan)); // Deep copy - We don't need to mutate the plan
+            
+            let cumulativeInflation = 1.0; // Start with no inflation
+
+            for (let age = currentAge; age <= MAX_AGE; age++) {
+                labels.push(age);
+
+                if (currentValue === 0 && age > currentAge) {
+                    // Pot is empty, fill rest of data with 0
+                    potData.push(0);
+                    let totalIncome = (includeStatePension && age >= statePensionAge) ? statePensionAmount : 0;
+                    incomeData.push(totalIncome);
+                    
+                    if (!useRandomness) updateTableCells(age, 0, totalIncome, 0); // Update table only on single run
+                    continue;
+                }
+
+                const yearPlan = plan[age]; // Get baseline plan for this age
+                let annualContribution = 0;
+                let annualWithdrawal = 0;
+                let totalIncome = 0;
+
+                // --- Determine this year's random rates ---
+                const annualReturnRate = useRandomness ? getNormalRandom(returnRate, returnStdDev) : returnRate;
+                // Use 0 inflation if not adjusting or not running simulation
+                const annualInflationRate = (useRandomness && adjustForInflation) ? getNormalRandom(inflationMean, inflationStdDev) : (adjustForInflation ? inflationMean : 0);
+
+                // --- Handle contributions and withdrawals ---
+                if (age < retirementAge) {
+                    annualContribution = yearPlan.contribution * 12;
+                    if (!useRandomness) updateTableCells(age, 0, 0, 0); // Update table
+                } else {
+                    if (retirementValue === 0) {
+                        retirementValue = currentValue;
+                        // This is the first year of retirement, cumulativeInflation is 1.0
+                    }
+                    
+                    // Apply cumulative inflation to the baseline withdrawal amount from the plan
+                    if (adjustForInflation) {
+                        annualWithdrawal = yearPlan.withdrawal * cumulativeInflation;
+                    } else {
+                        annualWithdrawal = yearPlan.withdrawal;
+                    }
+                    
+                    if (!useRandomness) { // Update table on single run
+                        const withdrawalPercent = (currentValue > 0) ? (annualWithdrawal / currentValue) * 100 : 0;
+                        let statePension = (includeStatePension && age >= statePensionAge) ? statePensionAmount : 0;
+                        updateTableCells(age, annualWithdrawal + statePension, withdrawalPercent, annualWithdrawal);
+                    }
+                }
+
+                // --- Core Calculation ---
+                let valueWithContribution = currentValue + annualContribution;
+                let interestEarned = valueWithContribution * annualReturnRate;
+                let endOfYearValue = valueWithContribution + interestEarned - annualWithdrawal;
+
+                if (endOfYearValue < 0) {
+                    annualWithdrawal = valueWithContribution + interestEarned; // Can only withdraw what's left
+                    endOfYearValue = 0;
+                    if (runsOutAge === "Never") runsOutAge = age;
+                }
+                
+                totalIncome = annualWithdrawal;
+                if (includeStatePension && age >= statePensionAge) {
+                    totalIncome += statePensionAmount;
+                }
+
+                currentValue = endOfYearValue;
+                potData.push(currentValue);
+                incomeData.push(totalIncome);
+
+                // --- Adjust cumulative inflation for next year ---
+                // This happens *after* all calculations for the current age
+                if (age >= retirementAge && adjustForInflation) {
+                    cumulativeInflation *= (1 + annualInflationRate);
+                }
+            }
+            return { labels, potData, incomeData, retirementValue, runsOutAge };
+        }
+        
+        /**
+         * Helper to update table cells during calculation
+         */
+        function updateTableCells(age, totalIncome, withdrawalPercent, potWithdrawal) {
+            const currentAge = parseInt(sliders.currentAge.value);
+            const retirementAge = parseInt(sliders.retirementAge.value);
+            
+            const percentCell = document.getElementById(`percent-${age}`);
+            const totalIncomeCell = document.getElementById(`total-income-${age}`);
+            
+            if (percentCell) {
+                percentCell.textContent = (age < retirementAge || potWithdrawal === 0) ? '-' : formatPercent(withdrawalPercent);
+            }
+            if (totalIncomeCell) {
+                totalIncomeCell.textContent = (age < retirementAge && totalIncome === 0) ? formatCurrency(0) : formatCurrency(totalIncome);
+            }
+        }
+
+
+        /**
+         * Runs the Monte Carlo simulation N times.
+         */
+        function runMonteCarloSimulation() {
+            const allPotResults = [];
+            const allIncomeResults = [];
+            const allRetirementValues = [];
+            const allRunsOutAges = [];
+            let labels = [];
+
+            const adjustForInflation = adjustForInflationCheck.checked;
+
+            for (let i = 0; i < NUM_SIMULATIONS; i++) {
+                const { potData, incomeData, retirementValue, runsOutAge, labels: simLabels } = calculateSingleRun(true, adjustForInflation);
+                allPotResults.push(potData);
+                allIncomeResults.push(incomeData);
+                allRetirementValues.push(retirementValue);
+                allRunsOutAges.push(runsOutAge === "Never" ? 999 : runsOutAge);
+                if (i === 0) labels = simLabels;
+            }
+
+            // Process results
+            const potData10 = [];
+            const potData50 = [];
+            const potData90 = [];
+            const incomeData50 = [];
+            
+            const numYears = labels.length;
+            for (let yearIndex = 0; yearIndex < numYears; yearIndex++) {
+                const potValuesForYear = allPotResults.map(sim => sim[yearIndex]).sort((a, b) => a - b);
+                potData10.push(potValuesForYear[Math.floor(NUM_SIMULATIONS * 0.10)]);
+                potData50.push(potValuesForYear[Math.floor(NUM_SIMULATIONS * 0.50)]);
+                potData90.push(potValuesForYear[Math.floor(NUM_SIMULATIONS * 0.90)]);
+                
+                const incomeValuesForYear = allIncomeResults.map(sim => sim[yearIndex]).sort((a, b) => a - b);
+                incomeData50.push(incomeValuesForYear[Math.floor(NUM_SIMULATIONS * 0.50)]);
+            }
+
+            allRetirementValues.sort((a, b) => a - b);
+            allRunsOutAges.sort((a, b) => a - b);
+
+            const medianRetirementValue = allRetirementValues[Math.floor(NUM_SIMULATIONS * 0.50)];
+            let medianRunsOutAge = allRunsOutAges[Math.floor(NUM_SIMULATIONS * 0.50)];
+            const successCount = allRunsOutAges.filter(age => age === 999).length;
+            const successRate = (successCount / NUM_SIMULATIONS) * 100;
+            
+            if (medianRunsOutAge === 999) medianRunsOutAge = "Never";
+
+            // Update table with median run data
+            const currentAge = parseInt(sliders.currentAge.value);
+            const retirementAge = parseInt(sliders.retirementAge.value);
+            for (let i = 0; i < numYears; i++) {
+                const age = currentAge + i;
+                if (age >= retirementAge) {
+                    const medianPot = potData50[i];
+                    // Find median pot withdrawal (which is median income - state pension)
+                    const statePension = (includeStatePensionCheck.checked && age >= parseInt(sliders.statePensionAge.value)) ? parseFloat(sliders.statePensionAmount.value) : 0;
+                    const medianPotWithdrawal = Math.max(0, incomeData50[i] - statePension);
+                    
+                    const withdrawalPercent = (medianPot > 0) ? (medianPotWithdrawal / medianPot) * 100 : 0;
+                    updateTableCells(age, incomeData50[i], withdrawalPercent, medianPotWithdrawal);
+                } else {
+                    updateTableCells(age, 0, 0, 0);
+                }
+            }
+
+            return { labels, potData10, potData50, potData90, incomeData50, medianRetirementValue, medianRunsOutAge, successRate };
+        }
+
+
+        /**
+         * Initializes the Chart.js instance
+         */
+        function initChart() {
+            const chartEl = document.getElementById('pensionChart');
+            if (!chartEl) return;
+            const ctx = chartEl.getContext('2d');
+            pensionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Pension Pot Value (Single Run)',
+                            data: [],
+                            type: 'line',
+                            borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            fill: true,
+                            tension: 0.1,
+                            pointRadius: 0,
+                            yAxisID: 'y-pot',
+                            hidden: false,
+                        },
+                        {
+                            label: '90th Percentile (Good)',
+                            data: [],
+                            type: 'line',
+                            borderColor: 'rgba(79, 70, 229, 0.4)',
+                            fill: false,
+                            tension: 0.1,
+                            pointRadius: 0,
+                            yAxisID: 'y-pot',
+                            hidden: true,
+                        },
+                        {
+                            label: '10th Percentile (Poor)',
+                            data: [],
+                            type: 'line',
+                            borderColor: 'rgba(79, 70, 229, 0.4)',
+                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            fill: '-1', // Fill to 90th percentile dataset
+                            tension: 0.1,
+                            pointRadius: 0,
+                            yAxisID: 'y-pot',
+                            hidden: true,
+                        },
+                        {
+                            label: '50th Percentile (Median)',
+                            data: [],
+                            type: 'line',
+                            borderColor: '#1f2937', // gray-800
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1,
+                            pointRadius: 0,
+                            yAxisID: 'y-pot',
+                            hidden: true,
+                        },
+                        {
+                            label: 'Total Annual Income',
+                            data: [],
+                            type: 'bar',
+                            backgroundColor: 'rgba(14, 165, 233, 0.6)', // sky-500
+                            borderColor: '#0ea5e9',
+                            yAxisID: 'y-income',
+                            hidden: true,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        'y-pot': {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
+                            ticks: { callback: (value) => formatCurrency(value) },
+                            grid: { drawOnChartArea: true }
+                        },
+                        'y-income': {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: true,
+                            ticks: { callback: (value) => formatCurrency(value) },
+                            grid: { drawOnChartArea: false }
+                        },
+                        x: {
+                            ticks: { maxTicksLimit: 15 }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    // Hide tooltips for percentile bands
+                                    if (context.datasetIndex === 1 || context.datasetIndex === 2) return null;
+                                    const label = context.dataset.label || '';
+                                    return `${label}: ${formatCurrency(context.raw)}`;
+                                }
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            labels: {
+                                filter: (legendItem) => legendItem.datasetIndex !== 2 // Hide 10th percentile
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index',
+                    }
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
+
+
+
+
+
